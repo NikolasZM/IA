@@ -1,0 +1,134 @@
+#include <windows.h>
+#include <GL/gl.h>
+#include <vector>
+#include <cstdlib>
+#include <ctime>
+#include <algorithm>
+
+#define POINTS_X 36
+#define POINTS_Y 36
+#define WIDTH (GetSystemMetrics(SM_CXSCREEN) * 0.85)
+#define HEIGHT (GetSystemMetrics(SM_CYSCREEN) * 0.85)
+#define SPACING_X (WIDTH / (POINTS_X - 1))
+#define SPACING_Y (HEIGHT / (POINTS_Y - 1))
+#define DELETE_PERCENTAGE 0.3  // 30% de los puntos serán eliminados
+
+LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+void Render();
+void GenerateDeletedPoints();
+
+HDC hDC;
+HGLRC hRC;
+std::vector<std::pair<int, int>> deletedPoints;
+
+bool IsDeleted(int x, int y) {
+    return std::find(deletedPoints.begin(), deletedPoints.end(), std::make_pair(x, y)) != deletedPoints.end();
+}
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    WNDCLASS wc = {};
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = "OpenGLWindow";
+    RegisterClass(&wc);
+
+    HWND hWnd = CreateWindow("OpenGLWindow", "OpenGL Grid", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0, 0, WIDTH, HEIGHT, NULL, NULL, hInstance, NULL);
+
+    hDC = GetDC(hWnd);
+    PIXELFORMATDESCRIPTOR pfd = { sizeof(PIXELFORMATDESCRIPTOR), 1, PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER, PFD_TYPE_RGBA, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 8, 0, PFD_MAIN_PLANE, 0, 0, 0, 0 };
+    int pixelFormat = ChoosePixelFormat(hDC, &pfd);
+    SetPixelFormat(hDC, pixelFormat, &pfd);
+    hRC = wglCreateContext(hDC);
+    wglMakeCurrent(hDC, hRC);
+
+    srand(time(NULL));
+    GenerateDeletedPoints();  // Generar los puntos a eliminar
+
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+        Render();
+        SwapBuffers(hDC);
+    }
+
+    wglMakeCurrent(NULL, NULL);
+    wglDeleteContext(hRC);
+    ReleaseDC(hWnd, hDC);
+    return 0;
+}
+
+LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+}
+
+void GenerateDeletedPoints() {
+    int totalPoints = POINTS_X * POINTS_Y;
+    int pointsToDelete = totalPoints * DELETE_PERCENTAGE;
+
+    while (deletedPoints.size() < pointsToDelete) {
+        int x = (rand() % POINTS_X) * SPACING_X;
+        int y = (rand() % POINTS_Y) * SPACING_Y;
+        if (!IsDeleted(x, y)) {
+            deletedPoints.push_back({ x, y });
+        }
+    }
+}
+
+void Render() {
+    glClear(GL_COLOR_BUFFER_BIT);
+    glLoadIdentity();
+    glOrtho(0, WIDTH, HEIGHT, 0, -1, 1);
+
+    glColor3f(0.0f, 0.0f, 1.0f);  // Azul para las líneas
+    glBegin(GL_LINES);
+
+    for (int i = 0; i < POINTS_X - 1; i++) {
+        for (int j = 0; j < POINTS_Y - 1; j++) {
+            int x1 = i * SPACING_X;
+            int y1 = j * SPACING_Y;
+            int x2 = (i + 1) * SPACING_X;
+            int y2 = (j + 1) * SPACING_Y;
+
+            // Si alguno de los puntos de la línea está eliminado, no la dibujamos
+            if (!IsDeleted(x1, y1) && !IsDeleted(x2, y1)) {
+                glVertex2f(x1, y1);
+                glVertex2f(x2, y1);
+            }
+            if (!IsDeleted(x1, y1) && !IsDeleted(x1, y2)) {
+                glVertex2f(x1, y1);
+                glVertex2f(x1, y2);
+            }
+            if (!IsDeleted(x1, y1) && !IsDeleted(x2, y2)) {
+                glVertex2f(x1, y1);
+                glVertex2f(x2, y2);
+            }
+            if (!IsDeleted(x2, y1) && !IsDeleted(x1, y2)) {
+                glVertex2f(x2, y1);
+                glVertex2f(x1, y2);
+            }
+        }
+    }
+
+    glEnd();
+
+    // Dibujar los puntos de la malla (excepto los eliminados)
+    glColor3f(1.0f, 1.0f, 1.0f); // Color blanco
+    glPointSize(4.0f);
+    glBegin(GL_POINTS);
+    for (int i = 0; i < POINTS_X; i++) {
+        for (int j = 0; j < POINTS_Y; j++) {
+            int x = i * SPACING_X;
+            int y = j * SPACING_Y;
+            if (!IsDeleted(x, y)) {
+                glVertex2f(x, y);
+            }
+        }
+    }
+    glEnd();
+}
