@@ -1,134 +1,384 @@
-#include <windows.h>
-#include <GL/gl.h>
-#include <vector>
+#include <GL/glut.h>
+#include <iostream>
 #include <cstdlib>
 #include <ctime>
+#include <vector>
+#include <stack>
+#include <cmath>  
+#include <queue>
+#include <set>
+#include <map>
 #include <algorithm>
 
-#define POINTS_X 36
-#define POINTS_Y 36
-#define WIDTH (GetSystemMetrics(SM_CXSCREEN) * 0.85)
-#define HEIGHT (GetSystemMetrics(SM_CYSCREEN) * 0.85)
-#define SPACING_X (WIDTH / (POINTS_X - 1))
-#define SPACING_Y (HEIGHT / (POINTS_Y - 1))
-#define DELETE_PERCENTAGE 0.3  // 30% de los puntos serán eliminados
 
-LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-void Render();
-void GenerateDeletedPoints();
+using namespace std;
 
-HDC hDC;
-HGLRC hRC;
-std::vector<std::pair<int, int>> deletedPoints;
+vector<pair<int, int>> puntosRojos;
+vector<pair<int, int>> Camino;
+pair<int, int> Inicio;
+pair<int, int> Fin;
 
-bool IsDeleted(int x, int y) {
-    return std::find(deletedPoints.begin(), deletedPoints.end(), std::make_pair(x, y)) != deletedPoints.end();
+void profundidad();
+void amplitud();
+void hillClimbing();
+void A_star();
+
+void generarPuntosRojos();
+bool existePunto(int x, int y);
+pair<int, int> seleccionarPunto();
+void reshape_cb(int w, int h)
+{
+	if (w == 0 || h == 0) return;
+	glViewport(0, 0, w, h);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluOrtho2D(0, 500, 0, 500);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+}
+void display_cb()
+{
+	glClear(GL_COLOR_BUFFER_BIT);
+	
+	glColor3f(0, 0, 0);
+	glLineWidth(2);
+	glBegin(GL_LINES);
+	for (auto& p1 : puntosRojos)
+	{
+		int x = p1.first;
+		int y = p1.second;
+		
+		if (existePunto(x + 25, y))
+		{
+			glVertex2i(x, y);
+			glVertex2i(x + 25, y);
+		}
+		if (existePunto(x, y + 25))
+		{
+			glVertex2i(x, y);
+			glVertex2i(x, y + 25);
+		}
+		if (existePunto(x + 25, y + 25))
+		{
+			glVertex2i(x, y);
+			glVertex2i(x + 25, y + 25);
+		}
+		if (existePunto(x - 25, y + 25))
+		{
+			glVertex2i(x, y);
+			glVertex2i(x - 25, y + 25);
+		}
+	}
+	glEnd();
+	
+	glColor3f(1, 0, 0);
+	glPointSize(5.0);
+	glBegin(GL_POINTS);
+	for (auto& p : puntosRojos)
+	{
+		glVertex2i(p.first, p.second);
+	}
+	glEnd();
+	
+	glColor3f(0, 0, 1);
+	glPointSize(7.0);
+	glBegin(GL_POINTS);
+	glVertex2i(Inicio.first, Inicio.second);
+	glVertex2i(Fin.first, Fin.second);
+	glEnd();
+	
+	glColor3f(0, 1, 0);
+	glPointSize(7.0);
+	glBegin(GL_POINTS);
+	glVertex2i(Fin.first, Fin.second);
+	glEnd();
+	glColor3f(0, 1, 1);
+	glPointSize(7.0);
+	glBegin(GL_LINE_STRIP);
+	glVertex2i(Inicio.first, Inicio.second);
+	for (auto& p : Camino) {
+		glVertex2i(p.first, p.second);
+	}
+	glEnd();
+	
+	glutSwapBuffers();
 }
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    WNDCLASS wc = {};
-    wc.lpfnWndProc = WindowProc;
-    wc.hInstance = hInstance;
-    wc.lpszClassName = "OpenGLWindow";
-    RegisterClass(&wc);
-
-    HWND hWnd = CreateWindow("OpenGLWindow", "OpenGL Grid", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0, 0, WIDTH, HEIGHT, NULL, NULL, hInstance, NULL);
-
-    hDC = GetDC(hWnd);
-    PIXELFORMATDESCRIPTOR pfd = { sizeof(PIXELFORMATDESCRIPTOR), 1, PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER, PFD_TYPE_RGBA, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 8, 0, PFD_MAIN_PLANE, 0, 0, 0, 0 };
-    int pixelFormat = ChoosePixelFormat(hDC, &pfd);
-    SetPixelFormat(hDC, pixelFormat, &pfd);
-    hRC = wglCreateContext(hDC);
-    wglMakeCurrent(hDC, hRC);
-
-    srand(time(NULL));
-    GenerateDeletedPoints();  // Generar los puntos a eliminar
-
-    MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-        Render();
-        SwapBuffers(hDC);
-    }
-
-    wglMakeCurrent(NULL, NULL);
-    wglDeleteContext(hRC);
-    ReleaseDC(hWnd, hDC);
-    return 0;
+void initialize() {
+	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
+	glutInitWindowSize(640, 480);
+	glutInitWindowPosition(100, 100);
+	glutCreateWindow("Tarea-1 IA: Busquedas");
+	glutDisplayFunc(display_cb);
+	glutReshapeFunc(reshape_cb);
+	glClearColor(1.f, 1.f, 1.f, 1.f);
+	generarPuntosRojos();
+	Inicio = seleccionarPunto();
+	Fin = seleccionarPunto();
+	profundidad();
+	
+	/*for (auto& p1 : puntosRojos)
+	{
+		cout << "(" << p1.first << ";" << p1.second << ")" << " ";
+	}*/
+	
+	cout << endl << "INICIO: " << "(" << Inicio.first << ";" << Inicio.second << ")" << endl;
+	cout << "FIN: " << "(" << Fin.first << ";" << Fin.second << ")" << endl;
+	
+	cout << endl << "(" << Inicio.first << ";" << Inicio.second << ")";
+	for (auto& p1 : Camino)
+	{
+		cout << "(" << p1.first << ";" << p1.second << ")" << " ";
+	}
+	cout  << "(" << Fin.first << ";" << Fin.second << ")";
 }
 
-LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    switch (uMsg) {
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        return 0;
-    }
-    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+int main(int argc, char** argv)
+{
+	srand(time(0));
+	glutInit(&argc, argv);
+	initialize();
+	glutMainLoop();
+	
+	return 0;
 }
 
-void GenerateDeletedPoints() {
-    int totalPoints = POINTS_X * POINTS_Y;
-    int pointsToDelete = totalPoints * DELETE_PERCENTAGE;
-
-    while (deletedPoints.size() < pointsToDelete) {
-        int x = (rand() % POINTS_X) * SPACING_X;
-        int y = (rand() % POINTS_Y) * SPACING_Y;
-        if (!IsDeleted(x, y)) {
-            deletedPoints.push_back({ x, y });
-        }
-    }
+pair<int, int> seleccionarPunto()
+{
+	int x = rand() % puntosRojos.size();
+	return puntosRojos[x];
+}
+bool existePunto(int x, int y)
+{
+	for (auto& p : puntosRojos)
+	{
+		if (p.first == x && p.second == y)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+void generarPuntosRojos()
+{
+	puntosRojos.clear();
+	for (int x = 0; x <= 500; x += 25) {
+		for (int y = 0; y <= 500; y += 25) {
+			if (rand() % 100 < 70) {
+				puntosRojos.push_back({ x, y });
+			}
+		}
+	}
 }
 
-void Render() {
-    glClear(GL_COLOR_BUFFER_BIT);
-    glLoadIdentity();
-    glOrtho(0, WIDTH, HEIGHT, 0, -1, 1);
-
-    glColor3f(0.0f, 0.0f, 1.0f);  // Azul para las líneas
-    glBegin(GL_LINES);
-
-    for (int i = 0; i < POINTS_X - 1; i++) {
-        for (int j = 0; j < POINTS_Y - 1; j++) {
-            int x1 = i * SPACING_X;
-            int y1 = j * SPACING_Y;
-            int x2 = (i + 1) * SPACING_X;
-            int y2 = (j + 1) * SPACING_Y;
-
-            // Si alguno de los puntos de la línea está eliminado, no la dibujamos
-            if (!IsDeleted(x1, y1) && !IsDeleted(x2, y1)) {
-                glVertex2f(x1, y1);
-                glVertex2f(x2, y1);
-            }
-            if (!IsDeleted(x1, y1) && !IsDeleted(x1, y2)) {
-                glVertex2f(x1, y1);
-                glVertex2f(x1, y2);
-            }
-            if (!IsDeleted(x1, y1) && !IsDeleted(x2, y2)) {
-                glVertex2f(x1, y1);
-                glVertex2f(x2, y2);
-            }
-            if (!IsDeleted(x2, y1) && !IsDeleted(x1, y2)) {
-                glVertex2f(x2, y1);
-                glVertex2f(x1, y2);
-            }
-        }
-    }
-
-    glEnd();
-
-    // Dibujar los puntos de la malla (excepto los eliminados)
-    glColor3f(1.0f, 1.0f, 1.0f); // Color blanco
-    glPointSize(4.0f);
-    glBegin(GL_POINTS);
-    for (int i = 0; i < POINTS_X; i++) {
-        for (int j = 0; j < POINTS_Y; j++) {
-            int x = i * SPACING_X;
-            int y = j * SPACING_Y;
-            if (!IsDeleted(x, y)) {
-                glVertex2f(x, y);
-            }
-        }
-    }
-    glEnd();
+void hillClimbing()
+{
+	pair<int, int> actual = Inicio;
+	cout << "\nCamino:\n";
+	cout << "(" << actual.first << ";" << actual.second << ") ";
+	
+	while (actual != Fin)
+	{
+		pair<int, int> mejorVecino = actual;
+		double mejorDistancia = hypot(Fin.first - actual.first, Fin.second - actual.second);
+		bool encontrado = false;
+		
+		for (const auto& p : puntosRojos)
+		{
+			if (abs(p.first - actual.first) <= 25 && abs(p.second - actual.second) <= 25)
+			{
+				double distancia = hypot(Fin.first - p.first, Fin.second - p.second);
+				if (distancia < mejorDistancia)
+				{
+					mejorDistancia = distancia;
+					mejorVecino = p;
+					encontrado = true;
+				}
+			}
+		}
+		
+		if (!encontrado) {
+			cout << "\nNo hay un camino mejor\n";
+			return;
+		}
+		
+		actual = mejorVecino;
+		Camino.push_back(actual);
+	}
+	
+	cout << "\nFIN.\n";
 }
+
+
+
+
+void amplitud() {
+	queue<pair<int, int>> cola;
+	map<pair<int, int>, pair<int, int>> predecesor;
+	set<pair<int, int>> visitados;
+	
+	cola.push(Inicio);
+	visitados.insert(Inicio);
+	bool encontrado = false;
+	
+	while (!cola.empty() && !encontrado) {
+		pair<int, int> actual = cola.front();
+		cola.pop();
+		
+		vector<pair<int, int>> direcciones = {
+			{25, 0}, {-25, 0}, {0, 25}, {0, -25},
+			{25, 25}, {-25, -25}, {25, -25}, {-25, 25}
+		};
+		
+		for (auto dir : direcciones) {
+			pair<int, int> vecino = { actual.first + dir.first, actual.second + dir.second };
+			
+			if (existePunto(vecino.first, vecino.second) && visitados.find(vecino) == visitados.end()) {
+				cola.push(vecino);
+				visitados.insert(vecino);
+				predecesor[vecino] = actual;
+				
+				if (vecino == Fin) {
+					encontrado = true;
+					break;
+				}
+			}
+		}
+	}
+	
+	if (encontrado) {
+		Camino.clear();
+		pair<int, int> paso = Fin;
+		while (paso != Inicio) {
+			Camino.push_back(paso);
+			paso = predecesor[paso];
+		}
+		reverse(Camino.begin(), Camino.end());
+	}
+	else {
+		cout << "No se encontró un camino." << endl;
+	}
+}
+void A_star() 
+{
+	pair<int, int> actual = Inicio;
+	cout << "\nCamino:\n";
+	cout << "(" << actual.first << ";" << actual.second << ") ";
+	
+	vector<vector<pair<int, int>>> padres(500 / 25 + 1, vector<pair<int, int>>(500 / 25 + 1, { -1, -1 }));
+	vector<vector<double>> gCosto(500 / 25 + 1, vector<double>(500 / 25 + 1, INFINITY));
+	vector<vector<double>> fTotal(500 / 25 + 1, vector<double>(500 / 25 + 1, INFINITY));
+	
+	gCosto[actual.first / 25][actual.second / 25] = 0;
+	fTotal[actual.first / 25][actual.second / 25] = hypot(Fin.first - actual.first, Fin.second - actual.second);
+	
+	vector<pair<int, int>> openSet;
+	openSet.push_back(actual);
+	
+	while (actual != Fin && !openSet.empty()) 
+	{
+		int mejorNodo = 0;
+		double minF = fTotal[openSet[0].first / 25][openSet[0].second / 25];
+		for (int i = 1; i < openSet.size(); i++) {
+			if (fTotal[openSet[i].first / 25][openSet[i].second / 25] < minF) {
+				minF = fTotal[openSet[i].first / 25][openSet[i].second / 25];
+				mejorNodo = i;
+			}
+		}
+		
+		actual = openSet[mejorNodo];
+		openSet.erase(openSet.begin() + mejorNodo);
+		
+		int dx[] = { -25, 0, 25, -25, 25, -25, 0, 25 };
+		int dy[] = { -25, -25, -25, 0, 0, 25, 25, 25 };
+		
+		for (int i = 0; i < 8; i++) {
+			pair<int, int> vecino = { actual.first + dx[i], actual.second + dy[i] };
+			
+			if (!existePunto(vecino.first, vecino.second)) continue;
+			
+			double posible_gCosto = gCosto[actual.first / 25][actual.second / 25] + hypot(dx[i], dy[i]);
+			
+			if (posible_gCosto < gCosto[vecino.first / 25][vecino.second / 25]) {
+				padres[vecino.first / 25][vecino.second / 25] = actual;
+				gCosto[vecino.first / 25][vecino.second / 25] = posible_gCosto;
+				fTotal[vecino.first / 25][vecino.second / 25] = posible_gCosto +
+					hypot(Fin.first - vecino.first, Fin.second - vecino.second);
+				
+				if (find(openSet.begin(), openSet.end(), vecino) == openSet.end()) {
+					openSet.push_back(vecino);
+				}
+			}
+		}
+	}
+	
+	if (actual == Fin) {
+		vector<pair<int, int>> camino_invertido;
+		pair<int, int> paso_actual = Fin;
+		while (paso_actual != Inicio) {
+			camino_invertido.push_back(paso_actual);
+			paso_actual = padres[paso_actual.first / 25][paso_actual.second / 25];
+		}
+		
+		for (int i = camino_invertido.size() - 1; i >= 0; i--) {
+			Camino.push_back(camino_invertido[i]);
+			cout << "(" << camino_invertido[i].first << ";" << camino_invertido[i].second << ") ";
+		}
+		cout << "\nFIN DE CAMINO.\n";
+	}
+	else {
+		cout << "\nNo se encontró un camino\n";
+	}
+}
+
+
+
+void profundidad() {
+    stack<pair<int, int>> pila;
+	map<pair<int, int>, pair<int, int>> predecesor;
+	set<pair<int, int>> visitados;
+	
+	pila.push(Inicio);
+	visitados.insert(Inicio);
+	bool encontrado = false;
+	
+	while (!pila.empty() && !encontrado) {
+		pair<int, int> actual = pila.top();
+		pila.pop();
+		
+		vector<pair<int, int>> direcciones = {
+			{25, 0}, {-25, 0}, {0, 25}, {0, -25},
+			{25, 25}, {-25, -25}, {25, -25}, {-25, 25}
+		};
+		
+		for (auto dir : direcciones) {
+			pair<int, int> vecino = { actual.first + dir.first, actual.second + dir.second };
+			
+			if (existePunto(vecino.first, vecino.second) && visitados.find(vecino) == visitados.end()) {
+				pila.push(vecino);
+				visitados.insert(vecino);
+				predecesor[vecino] = actual;
+				
+				if (vecino == Fin) {
+					encontrado = true;
+					break;
+				}
+			}
+		}
+	}
+	
+	if (encontrado) {
+		Camino.clear();
+		pair<int, int> paso = Fin;
+		while (paso != Inicio) {
+			Camino.push_back(paso);
+			paso = predecesor[paso];
+		}
+		reverse(Camino.begin(), Camino.end());
+	}
+	else {
+		cout << "No se encontró un camino." << endl;
+	}
+}
+
+
