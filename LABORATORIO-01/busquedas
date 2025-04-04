@@ -15,8 +15,8 @@ using namespace std;
 
 vector<pair<int, int>> puntosRojos;
 vector<pair<int, int>> Camino;
-pair<int, int> Inicio;
-pair<int, int> Fin;
+pair<int, int> Inicio(100,100);
+pair<int, int> Fin(275,175);
 
 void profundidad();
 void amplitud();
@@ -113,13 +113,13 @@ void initialize() {
 	glutReshapeFunc(reshape_cb);
 	glClearColor(1.f, 1.f, 1.f, 1.f);
 	generarPuntosRojos();
-	Inicio = seleccionarPunto();
-	Fin = seleccionarPunto();
+	//Inicio = seleccionarPunto();
+	//Fin = seleccionarPunto();
 	profundidad();
 	
 	/*for (auto& p1 : puntosRojos)
 	{
-		cout << "(" << p1.first << ";" << p1.second << ")" << " ";
+	cout << "(" << p1.first << ";" << p1.second << ")" << " ";
 	}*/
 	
 	cout << endl << "INICIO: " << "(" << Inicio.first << ";" << Inicio.second << ")" << endl;
@@ -334,7 +334,7 @@ void A_star()
 
 
 void profundidad() {
-    stack<pair<int, int>> pila;
+	stack<pair<int, int>> pila;
 	map<pair<int, int>, pair<int, int>> predecesor;
 	set<pair<int, int>> visitados;
 	
@@ -344,7 +344,7 @@ void profundidad() {
 	
 	while (!pila.empty() && !encontrado) {
 		pair<int, int> actual = pila.top();
-		pila.pop();
+		//pila.pop();
 		
 		vector<pair<int, int>> direcciones = {
 			{25, 0}, {-25, 0}, {0, 25}, {0, -25},
@@ -354,20 +354,26 @@ void profundidad() {
 		for (auto dir : direcciones) {
 			pair<int, int> vecino = { actual.first + dir.first, actual.second + dir.second };
 			
-			if (existePunto(vecino.first, vecino.second) && visitados.find(vecino) == visitados.end()) {
+			if (existePunto(vecino.first, vecino.second) && (visitados.find(vecino) == visitados.end())) {
 				pila.push(vecino);
 				visitados.insert(vecino);
 				predecesor[vecino] = actual;
 				
 				if (vecino == Fin) {
 					encontrado = true;
-					break;
 				}
+				
+				break;
+			}
+			
+			if(dir==direcciones.back()){
+				pila.pop();
 			}
 		}
 	}
 	
 	if (encontrado) {
+		cout<<"lo encontre";
 		Camino.clear();
 		pair<int, int> paso = Fin;
 		while (paso != Inicio) {
@@ -380,4 +386,5 @@ void profundidad() {
 		cout << "No se encontró un camino." << endl;
 	}
 }
+
 
