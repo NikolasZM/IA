@@ -1,0 +1,3 @@
+g++ main.cpp PatchEmbedder.cpp PositionalEmbedding.cpp BitLinear.cpp BitAttention.cpp BitMLP.cpp BitTransformerEncoderLayer.cpp GlobalAveragePooling.cpp ClassifierUtils.cpp -o bitnet_test
+g++ evaluate.cpp PatchEmbedder.cpp PositionalEmbedding.cpp BitLinear.cpp BitAttention.cpp BitMLP.cpp BitTransformerEncoderLayer.cpp GlobalAveragePooling.cpp ClassifierUtils.cpp -o evaluar
+g++ evaluate.cpp BitVisionTransformer.cpp BitTransformerEncoderLayer.cpp BitMLP.cpp BitAttention.cpp BitLinear.cpp PatchEmbedder.cpp GlobalAveragePooling.cpp PositionalEmbedding.cpp ClassifierUtils.cpp -o evaluar
